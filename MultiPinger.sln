@@ -3,14 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{5B293FC4-916C-4911-A20E-00FF8A93C09B}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B3D61501-9B41-4126-BF44-49042B9E0DF9}"
-	ProjectSection(SolutionItems) = preProject
-		global.json = global.json
-	EndProjectSection
-EndProject
-Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "MultiPinger", "src\MultiPinger\MultiPinger.xproj", "{ED3CA6F2-3735-465E-82D6-22F0A5967EB1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiPinger", "MultiPinger\MultiPinger.csproj", "{C0DDFEC0-3876-4150-93E3-BE22AD0706C7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,15 +11,12 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{ED3CA6F2-3735-465E-82D6-22F0A5967EB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{ED3CA6F2-3735-465E-82D6-22F0A5967EB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{ED3CA6F2-3735-465E-82D6-22F0A5967EB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{ED3CA6F2-3735-465E-82D6-22F0A5967EB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0DDFEC0-3876-4150-93E3-BE22AD0706C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0DDFEC0-3876-4150-93E3-BE22AD0706C7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0DDFEC0-3876-4150-93E3-BE22AD0706C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0DDFEC0-3876-4150-93E3-BE22AD0706C7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{ED3CA6F2-3735-465E-82D6-22F0A5967EB1} = {5B293FC4-916C-4911-A20E-00FF8A93C09B}
 	EndGlobalSection
 EndGlobal

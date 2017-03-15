@@ -59,7 +59,7 @@ namespace MultiPinger {
             // write header to output
 
             outputStreamWriter.WriteLine(string.Join(",", (new string[] {
-                "Time"
+                "ISO DateTime", "UNIX Timestamp"
             }).Concat(ipAddresses.Select(ip => ip.ToString()))));
 
             // enter ping loop
@@ -93,7 +93,10 @@ namespace MultiPinger {
                     .OrderBy(pr => ipAddresses.IndexOf(pr.Address))
                     .Select(pr => pr.Status == IPStatus.Success ? pr.RoundtripTime.ToString() : "");
 
-                var line = string.Join(",", (new string[] { currentTime.ToString("o") })
+                var line = string.Join(",", (new string[] {
+                    currentTime.ToString("o"),
+                    currentTime.ToUnixTimeMilliseconds().ToString()
+                })
                     .Concat(orderedReplyTimes));
 
                 outputStreamWriter.WriteLine(line);

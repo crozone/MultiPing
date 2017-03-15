@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -12,98 +13,206 @@ namespace MultiPinger {
     /// <summary>
     /// MultiPinger by RC 2017
     /// </summary>
-    class Program {
+    public class Program {
         public static void Main(string[] args) {
             Task.Run(() => MainAsync()).GetAwaiter().GetResult();
         }
 
         public static async Task MainAsync() {
-            Console.WriteLine("Enter IP Addresses to ping now.");
-            Console.WriteLine("Enter a blank line to finish.");
-            Console.WriteLine();
 
             List<IPAddress> ipAddresses = new List<IPAddress>();
 
-            string input;
-            while ((input = Console.ReadLine()) != string.Empty) {
-                IPAddress inputIPAddress;
-                if (!IPAddress.TryParse(input, out inputIPAddress)) {
-                    Console.WriteLine("Invalid IP Address, try again");
-                    continue;
+            while (true) {
+                Console.WriteLine("Enter IP Addresses to ping now.");
+                Console.WriteLine("Enter a blank line to finish.");
+                Console.WriteLine();
+
+                string ipLineInput;
+                while ((ipLineInput = Console.ReadLine()) != string.Empty) {
+                    IPAddress inputIPAddress;
+                    if (!IPAddress.TryParse(ipLineInput, out inputIPAddress)) {
+                        Console.WriteLine("Invalid IP Address, try again");
+                        continue;
+                    }
+
+                    if (ipAddresses.Contains(inputIPAddress)) {
+                        Console.WriteLine("IP Address already entered, try again");
+                        continue;
+                    }
+
+                    ipAddresses.Add(inputIPAddress);
                 }
 
-                ipAddresses.Add(inputIPAddress);
+                if (ipAddresses.Count > 0) {
+                    Console.WriteLine($"Using {ipAddresses.Count} IP Addresses.");
+                    break;
+                }
+
+                Console.WriteLine("No IP Addresses entered.");
+                Console.WriteLine();
+                continue;
             }
 
             // get output CSV file name
             Console.WriteLine();
             Console.WriteLine("Enter output CSV file name");
-            StreamWriter outputStreamWriter = null;
+            StreamWriter outputStreamWriter;
             while (true) {
-                input = Console.ReadLine();
-                if (string.IsNullOrWhiteSpace(input)) {
-                    Console.WriteLine("Invalid filename, try again");
-                    continue;
+                string filenameInput = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(filenameInput)) {
+                    Console.WriteLine("No filename provided, will not save output.");
+                    outputStreamWriter = null;
+                    break;
                 }
 
                 try {
-                    outputStreamWriter = new StreamWriter(File.OpenWrite(input));
+                    outputStreamWriter = new StreamWriter(File.OpenWrite(filenameInput));
+                    Console.WriteLine($"{filenameInput} opened for writing.");
                     break;
                 }
                 catch (Exception ex) {
-                    Console.WriteLine($"Could not open {input} for writing. {ex.Message}. Try again.");
+                    Console.WriteLine($"Could not open {filenameInput} for writing. {ex.Message}. Try again.");
                     continue;
                 }
             }
 
-            // write header to output
+            Console.WriteLine();
+            Console.WriteLine("Starting ping loop.");
 
-            outputStreamWriter.WriteLine(string.Join(",", (new string[] {
-                "ISO DateTime", "UNIX Timestamp"
-            }).Concat(ipAddresses.Select(ip => ip.ToString()))));
+            // the minumum delay between two pings to the same host.
+            TimeSpan pingDelay = new TimeSpan(0, 0, 0, 0, 0); // 100ms
+
+            // stopwatch used for regular status updates and write buffer flushing
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+
+            // write output header
+            if (outputStreamWriter != null) {
+                await outputStreamWriter.WriteLineAsync(string.Join(",", (new string[] {
+                "ISO DateTime", "Date", "Time", "UNIX Timestamp"
+                }).Concat(ipAddresses.Select(ip => ip.ToString()))));
+            }
+
+            // keep track of ping counts
+            Dictionary<IPAddress, PingCounter> pingCountsDict
+                = ipAddresses.ToDictionary(ip => ip, ip => new PingCounter() { Attempted = 0, Success = 0 });
+
+            // correlate an IPAddress to the task responsible for pinging that IPAddress
+            Dictionary<IPAddress, Task<PingResult>> pingTaskDict
+                    = new Dictionary<IPAddress, Task<PingResult>>();
 
             // enter ping loop
             while (true) {
-                // create array to hold ping time results 
-                int[] pingTimes = new int[ipAddresses.Count];
-
-                DateTimeOffset currentTime = DateTimeOffset.Now;
-
-                List<Task<PingReply>> pingTasks = new List<Task<PingReply>>();
-
-                Console.WriteLine($"Starting ping group at {currentTime.ToString("o")}");
-
+                // go through each IP Address and spawn a ping task for it if none exists
                 foreach (IPAddress thisIpAddress in ipAddresses) {
-                    // create pinger
-                    Ping pinger = new Ping();
+                    if (!pingTaskDict.ContainsKey(thisIpAddress)) {
+                        // create the ping task, but do not await it here.
+                        Task<PingResult> pingTask = Task.Run(async () => {
+                            // rate limiting task
+                            PingResult result = new PingResult();
 
-                    Console.WriteLine($"Pinging {thisIpAddress.ToString()}");
-                    Task<PingReply> pingTask = pinger.SendPingAsync(thisIpAddress, 3000);
-                    pingTasks.Add(pingTask);
+                            // create pinger
+                            using (Ping pinger = new Ping()) {
+                                result.Target = thisIpAddress;
+                                result.StartTime = DateTimeOffset.Now;
+
+                                // start rate limiting timer before ping starts
+                                Task delayTask = null;
+                                if (pingDelay > TimeSpan.Zero) {
+                                    delayTask = Task.Delay(pingDelay);
+                                }
+
+                                // send and await the ping
+                                result.PingReply = await pinger.SendPingAsync(thisIpAddress, 3000);
+
+                                // optionally await the holdoff time
+                                if (delayTask != null) {
+                                    await delayTask;
+                                }
+                            }
+
+                            return result;
+                        });
+
+                        // add the task to the dict
+                        pingTaskDict.Add(thisIpAddress, pingTask);
+                    }
                 }
 
-                Console.WriteLine("Waiting for ping results ...");
-                PingReply[] pingReplies = await Task.WhenAll(pingTasks);
-                Console.WriteLine("All pings recieved.");
+                // wait until any ping task completes and get the result
+                PingResult pingResult = await await Task.WhenAny(pingTaskDict.Values);
 
-                // we now have all the ping replies for this data point
+                // remove the completed task so that a fresh one is
+                // recreated on the next loop
+                pingTaskDict.Remove(pingResult.Target);
 
-                // write the output to file
-                var orderedReplyTimes = pingReplies
-                    .OrderBy(pr => ipAddresses.IndexOf(pr.Address))
-                    .Select(pr => pr.Status == IPStatus.Success ? pr.RoundtripTime.ToString() : "");
+                // increment attempted ping counter
+                // increment ping count for this ip
+                pingCountsDict[pingResult.Target].Attempted++;
 
-                var line = string.Join(",", (new string[] {
-                    currentTime.ToString("o"),
-                    currentTime.ToUnixTimeMilliseconds().ToString()
-                })
-                    .Concat(orderedReplyTimes));
+                if (pingResult.PingReply.Status == IPStatus.Success) {
+                    // increment ping count for this ip
+                    pingCountsDict[pingResult.Target].Success++;
 
-                outputStreamWriter.WriteLine(line);
-                outputStreamWriter.Flush();
+                    if (outputStreamWriter != null) {
+                        // save the result from the ping that completed in the correct column
+                        string[] responseValueColumns = new string[ipAddresses.Count];
+                        int ipAddressIndex = ipAddresses.IndexOf(pingResult.Target);
 
-                await Task.Delay(new TimeSpan(0, 0, 0, 0, 200));
+                        responseValueColumns[ipAddressIndex] = pingResult.PingReply.RoundtripTime.ToString();
+
+                        // create the output line
+                        var line = string.Join(
+                            ",",
+                            (new string[] {
+                                pingResult.StartTime.ToString("o"),
+                                pingResult.StartTime.ToString("yyyy-mm-dd"),
+                                pingResult.StartTime.ToString("hh:MM:ss.fff"),
+                                pingResult.StartTime.ToUnixTimeMilliseconds().ToString()
+                            })
+                            .Concat(responseValueColumns));
+
+                        // write the output line
+                        await outputStreamWriter.WriteLineAsync(line);
+                    }
+                }
+
+                // if it has been more than a second since the last maintenance update,
+                // do another one.
+                if (sw.ElapsedMilliseconds > 1000) {
+                    // write status update to console
+                    Console.WriteLine();
+                    Console.WriteLine($"[{DateTimeOffset.Now.ToString("o")}]");
+
+                    if (outputStreamWriter != null) {
+                        // flush the output writer to disk
+                        await outputStreamWriter.FlushAsync();
+
+                        FileStream fs = outputStreamWriter?.BaseStream as FileStream;
+
+                        if (fs != null) {
+                            Console.WriteLine($"{fs.Name}: {fs.Length / 1024} kb");
+                        }
+                    }
+
+                    foreach (var thisPair in pingCountsDict) {
+                        Console.WriteLine($"{thisPair.Key.ToString()}: {thisPair.Value.Success} / {thisPair.Value.Attempted}");
+                    }
+                    // reset the stopwatch.
+                    sw.Restart();
+                }
             }
         }
+    }
+
+    public class PingResult {
+        public DateTimeOffset StartTime { get; set; }
+        public IPAddress Target { get; set; }
+        public PingReply PingReply { get; set; }
+    }
+
+    public class PingCounter {
+        public int Success { get; set; }
+        public int Attempted { get; set; }
     }
 }

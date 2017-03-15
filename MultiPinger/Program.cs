@@ -53,6 +53,36 @@ namespace MultiPinger {
                 continue;
             }
 
+            // the minumum delay between two pings to the same host.
+            TimeSpan pingDelay; // 100ms
+
+            // get ping rate limit from user
+            Console.WriteLine();
+            Console.WriteLine("Enter max requests per host, per second [default 5] (0 for infinite)");
+            while (true) {
+                string requestsPerSecondInput = Console.ReadLine();
+                int requestsPerSecond = 5;
+                if (string.IsNullOrWhiteSpace(requestsPerSecondInput)) {
+                    Console.WriteLine("No input, using defaults");
+                }
+                else {
+                    if (!int.TryParse(requestsPerSecondInput, out requestsPerSecond)) {
+                        Console.WriteLine("Not an integer, try again.");
+                        continue;
+                    }
+                }
+
+                if (requestsPerSecond > 0) {
+                    pingDelay = new TimeSpan(0, 0, 0, 0, 1000 / requestsPerSecond);
+                }
+                else {
+                    pingDelay = TimeSpan.Zero;
+                }
+
+                Console.WriteLine($"Inter-ping delay set to {pingDelay.TotalMilliseconds}ms per host");
+                break;
+            }
+
             // get output CSV file name
             Console.WriteLine();
             Console.WriteLine("Enter output CSV file name");
@@ -78,9 +108,6 @@ namespace MultiPinger {
 
             Console.WriteLine();
             Console.WriteLine("Starting ping loop.");
-
-            // the minumum delay between two pings to the same host.
-            TimeSpan pingDelay = new TimeSpan(0, 0, 0, 0, 0); // 100ms
 
             // stopwatch used for regular status updates and write buffer flushing
             Stopwatch sw = new Stopwatch();
